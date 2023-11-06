@@ -122,3 +122,109 @@ class NetCat:
             print('User terminated.')
             self.socket.close()
             sys.exit()
+
+
+    def listen(sefl):
+        """
+        Set up the server to listen for incoming connections on the target IP and port.
+        This method binds the server to the specified address and starts listening for
+        incoming connections. For each connection, it starts a new thread to handle
+        the client communication.
+        """
+        # Bind the socket to the server address
+        self.socket.bind((self.args.target, self.args.port))
+
+        # Start listening with a maximum backlog of 5 connections
+        self.socket.listen(5)
+
+        # Enter the loop to accept incoming connections
+        while True:
+
+            # Accept an incoming connection
+            client_socket, _ = self.socket.accept()
+
+            # Start a new thread to handle the client connection
+            client_tread = threading.Thread(
+                target=self.handle, args=(client_socket,)
+            )
+
+            # begin the client handling thread
+            client_thread.start()
+
+    def handle(self, client_socket):
+        """
+        Handle client connections for different modes like execute, upload, or command.
+        For 'execute', it runs a command and sends the output back to the client.
+        For 'upload', it saves the incoming data to a file.
+        For 'command', it provides a simple command shell.
+        """
+
+        # If the execute command is set run the command and send back the output
+        if self.args.execute:
+            output = execute(self.args.execute)
+            client_socket.send(output.encode())
+
+        # If the upload argument is set, receive all the data and save it to the specified file
+        elif self.args.upload:
+
+            # initialize a buffer to store the incoming file data
+            file_buffer = b''
+
+            # Keep receiving the data until there is no more to come
+            while True:
+                data = client_socket.recv(4096)
+                if data:
+                    file_buffer += data
+                else:
+                    break
+
+            # Write the received data to a file
+            with open(self.args.upload, 'wb') as f:
+                f.write(file_buffer)
+
+            # Send a comfirmation message back to the client 
+            message = f'Saved file {self.args.upload}'
+            client_socket.send(message.encore())
+
+        # If the command argument is set, provide a simple shell
+        elif self.args.command:
+
+            # initialize a buffer to accumulate the command from the client
+            cmd_buffer = b''
+
+            # Enter a loop to interact with the client indefinitly
+            while True:
+                try:
+
+                    # prompt the client for a command
+                    client_socket.send(b'BHP: #> ')
+
+                    # Receiving characters until a newline character is detected
+                    # indicating the end the client's command input
+                    while '\n' not in cmd_buffer.decode():
+
+                        # receive data from the client 64 bytes at a time
+                        cmd_buffer += client_socket.recv(64)
+
+                    # Once the full command as been received, execute it
+                    response = execute(cmd_buffer.decode())
+
+                    # If there is a response from the command, send it back to the client
+                    if response:
+                        client_socket.send(response.encode())
+
+                    # Resets the command buffer to receive the next command
+                    cmd_buffer = b''
+
+                # Handle any exception that occuer during command execution
+                except Exception as e:
+
+                    # Print the error message indicating the server has been killed
+                    print(f'server killed {e}')
+
+                    # Close the socket connection to the client
+                    self.socket.close()
+
+                    # Exit the program
+                    sys.exit()
+
